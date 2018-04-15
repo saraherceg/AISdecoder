@@ -8,20 +8,25 @@ from mpl_toolkits.basemap import Basemap
 import numpy as np
 import matplotlib.pyplot as plt
 
-map = Basemap(projection='merc', llcrnrlat=0, urcrnrlat=80, llcrnrlon=-90, urcrnrlon=90, lat_ts=20, resolution='i')
+decoded_observations = 0
+all_observations = 0
+file_counter = 0
+plot_counter = 0
+
+print ("Creating a map")
+
+map = Basemap(projection='merc', llcrnrlat=0, urcrnrlat=60, llcrnrlon=-40, urcrnrlon=40, lat_ts=10, resolution='i')
 map.drawcoastlines()
-#map.shadedrelief()
+map.shadedrelief()
 map.drawparallels(np.arange(-90.,91.,30.))
 map.drawmeridians(np.arange(-180.,181.,60.))
-plt.title("Observations plot")
-
-counter = 0
+plt.title("Observations map")
 
 def plot_on_map(observation):
-	global counter
+	global map
+	global plot_counter
 	x = 0
 	y = 0
-	global map
 	#print(observation)
 	observation_list = observation.split(", ")
 	for i in observation_list:
@@ -36,20 +41,53 @@ def plot_on_map(observation):
 	if (x != 0 and y != 0): 
 		lon, lat = map(x,y)
 		map.plot(lon,lat,'ro', markersize = 2)
-		plt.show()
-		counter = counter + 1
+		plot_counter = plot_counter + 1
+
+def decode(filename):
+
+	file  = gzip.open(filename, 'r')
+	global decoded_observations
+	global all_observations
+	timestamp = '0'
+
+	for line in file:
+		all_observations = all_observations +1
+		try:
+			line_list = line.split(",")
+
+			field_0 = line_list[0]
+			if(field_0[0] != "!"):
+				# timestamp is present
+				timestamp = field_0[:17]
+			field_6 = line_list[6].rstrip('\r\n')
+			if (str(field_6)[0] == "0"):
+				decoded = str((ais.decode(str(line_list[5]), 0)))
+				## insert current timestamp value
+				timestamp_position = (decoded).find("timestamp") + 12
+				decoded_timestamp = decoded[:timestamp_position] + str(timestamp) + decoded[timestamp_position+3:]
+				if (all_observations%10 == 0):	#specify if want to only run through a part
+					plot_on_map(decoded_timestamp)
+					decoded_observations = decoded_observations+1	
+			else:
+				file.readline()      # skip next line as it is a part of previous observation
+		except Exception:
+			pass
+	
+	print ("Successfully decoded observations: " + str(decoded_observations) +"/" + str(all_observations) + " (" + str(float(decoded_observations)/float(all_observations)) + ")")	
 
 start = time.time()
 
-file = open('decoded.txt', 'r')
-print ("plotting observations")
-for line in file:
-	plot_on_map(line)
-	if (counter%1000 == 0):
-		#print counter
+for filename in os.listdir(os.getcwd()):
+	if filename.endswith(".txt.gz"):
+		file_counter = file_counter+1
+		print ("decoding file " + str(file_counter) +": " + filename )
+		decode(filename)
+		continue
+	else:
 		continue
 
 end = time.time()
 print("Time elapsed: " + str(end - start))
-print("Plotted observations: " + str(counter))
+print ("Successfully decoded observations: " + str(decoded_observations) +"/" + str(all_observations) + " (" + str(float(decoded_observations)/float(all_observations)) + ")")
+print ("Observations plotted on the map: " + str(plot_counter))
 plt.show()
